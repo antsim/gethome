@@ -1,30 +1,37 @@
 # Työaikalaskuri
 
-Henkilökohtainen macOS-sovellus, joka näyttää menu barissa ja pienessä
-kelluvassa ikkunassa, paljonko päivän työajasta on jäljellä. Tiedot haetaan
-[Togglista](https://toggl.com/) (Toggl 2.0 tai Toggl Track). Kun Togglessa ei ole ajastinta
-käynnissä, laskuri pysähtyy ja näytölle tulee teksti **"Tauolla"**.
+A personal macOS app that shows how much of today's working time is left,
+in the menu bar and in a small floating window. The data comes from
+[Toggl](https://toggl.com/) (Toggl 2.0 or Toggl Track). When no Toggl timer
+is running, the countdown stops and the app shows **"Tauolla"** (on a break).
 
 ```
-⏱ 3:42:15            menu bar, ajastin käynnissä
-⏸ 3:42 Tauolla       ei käynnissä olevaa ajastinta
-✓ +0:12              tavoite täynnä, ylityötä 12 min
+⏱ 3:42:15            menu bar, timer running
+⏸ 3:42 Tauolla       no timer running
+✓ +0:12              target reached, 12 min of overtime
 ```
 
-## Ominaisuudet
+> The app's user interface is in Finnish. This README gives the Finnish
+> labels with English translations in parentheses.
 
-- Jäljellä oleva aika menu barissa. Päivittyy sekunnin välein myös silloin, kun ikkuna on piilossa.
-- Kehyksetön, aina päällä pysyvä ikkuna. Sen voi raahata esimerkiksi ulkoiselle näytölle, ja sijainti säilyy.
-- Ajastimen pysäytys ja jatkaminen suoraan sovelluksesta.
-- Päiväkohtainen tavoite (oletus ma–pe 7:30, la–su 0 h).
-- Valmistumisaika-arvio ("valmis klo 16:05") ja tauon kesto.
-- Vaalea ja tumma teema, säädettävä läpinäkyvyys, käynnistys kirjautuessa.
-- Toggl API -kutsuja normaalikäytössä alle 20 tunnissa. Rajoitukset, verkkokatkot ja uni käsitellään hallitusti.
-- API-avain tallennetaan vain macOS:n avainnippuun (Keychain).
+## Features
 
-## Asennus ja käyttöönotto
+- Time left in the menu bar. It updates every second, also while the window is hidden.
+- A frameless, always-on-top window. You can drag it to an external display, for example, and it remembers its position.
+- Stop and resume the Toggl timer directly from the app.
+- When you pause with less than 15 minutes of the day's target left, the
+  entry ends at the moment the target is reached instead of now. You can
+  shut down a little early and still have a full day. If you resume before
+  that time, the entry ends when you resume instead. (Toggl Track only for now.)
+- A daily target per weekday (default Mon–Fri 7:30, Sat–Sun 0 h).
+- Estimated finishing time ("valmis klo 16:05", done at 16:05) and break length.
+- Light and dark theme, adjustable opacity, launch at login.
+- Fewer than 20 Toggl API requests per hour in normal use. Rate limits, network outages and sleep are handled gracefully.
+- The API key is stored only in the macOS Keychain.
 
-Vaatimukset: macOS 11+, [Node.js](https://nodejs.org/) 22+, [Rust](https://rustup.rs/) (stable) ja Xcode Command Line Tools.
+## Installation
+
+Requirements: macOS 11+, [Node.js](https://nodejs.org/) 22+, [Rust](https://rustup.rs/) (stable) and the Xcode Command Line Tools.
 
 ```bash
 git clone https://github.com/antsim/gethome.git
@@ -32,120 +39,131 @@ cd gethome
 npm install
 ```
 
-Kehitystilassa ajo:
+Run in development mode:
 
 ```bash
 npm run dev
 ```
 
-Julkaisuversion (`.app` ja `.dmg`) rakentaminen:
+Build a release version (`.app` and `.dmg`):
 
 ```bash
 npm run bundle
 ```
 
-Valmis paketti löytyy hakemistosta `src-tauri/target/release/bundle/`.
-Sovellus ei ole allekirjoitettu, joten ensimmäisellä käynnistyskerralla se
-avataan Finderissa hiiren oikealla painikkeella → *Avaa*.
+The bundle is written to `src-tauri/target/release/bundle/`. The app is not
+signed, so the first time you open it, right-click it in Finder and choose
+*Open*.
 
-### API-avaimen asetus
+### Setting the API key
 
-Sovellus tukee sekä **Toggl 2.0:aa** (`focus.toggl.com`) että vanhempaa
-**Toggl Trackia** (`track.toggl.com`). Versio tunnistetaan avaimesta
-automaattisesti.
+The app supports both **Toggl 2.0** (`focus.toggl.com`) and the older
+**Toggl Track** (`track.toggl.com`). The product is detected from the key
+automatically.
 
-- **Toggl 2.0:** *Settings → Toggl account → API key*. Avain alkaa
-  `toggl_sk_` ja näytetään vain kerran. Uuden avaimen luominen mitätöi
-  vanhan.
-- **Toggl Track:** [profiilisivun](https://track.toggl.com/profile) kohta
-  *API Token*.
+- **Toggl 2.0:** *Settings → Toggl account → API key*. The key starts with
+  `toggl_sk_` and is shown only once. Creating a new key invalidates the
+  old one.
+- **Toggl Track:** *API Token* on your
+  [profile page](https://track.toggl.com/profile).
 
-1. Avaa sovelluksen valikosta menu barissa *Asetukset…*.
-2. Liitä avain ja paina *Tallenna*. Sovellus tarkistaa avaimen ja näyttää
-   yhdistetyn tilin ja workspacen.
+1. Open the app's menu in the menu bar and choose *Asetukset…* (Settings).
+2. Paste the key and click *Tallenna* (Save). The app verifies the key and
+   shows the connected account and workspace.
 
-Avain tallennetaan vain avainnippuun. Sitä ei kirjoiteta tiedostoon eikä
-lähetetä mihinkään muualle kuin Toggl API:in.
+The key is stored only in the Keychain. It is never written to a file or
+sent anywhere other than the Toggl API.
 
-Toggl 2.0:ssa sovellus lukee yhden workspacen kirjaukset: sen, jonka Toggl
-antaa avaimelle oletukseksi (`users/me/landing-workspace`). Tauko-tyyppiset
-kirjaukset (*break*) ja pelkästään suunnitellut kirjaukset eivät kerrytä
-työaikaa.
+With Toggl 2.0, the app reads the entries of one workspace: the one Toggl
+gives as the default for the key (`users/me/landing-workspace`). Break
+entries (*break*) and planned-only entries do not count as working time.
 
-## Käyttö
+## Usage
 
-| Toiminto | Miten |
+| Action | How |
 |---|---|
-| Näytä/piilota ikkuna | Menu bar → *Näytä ikkuna* / *Piilota ikkuna* |
-| Pysäytä ajastin / jatka työtä | Ikkunan ⏸/▶-painike tai menu bar |
-| Päivitä heti | Menu bar → *Päivitä nyt* (enintään kerran 30 sekunnissa) |
-| Asetukset | Menu bar → *Asetukset…* tai ikkunan ⚙ (näkyy hiiren ollessa ikkunan päällä) |
-| Siirrä ikkunaa | Raahaa mistä tahansa kohdasta |
+| Show/hide the window | Menu bar → *Näytä ikkuna* / *Piilota ikkuna* (Show / Hide window) |
+| Stop the timer / resume work | The ⏸/▶ button in the window, or the menu bar |
+| Refresh now | Menu bar → *Päivitä nyt* (Refresh now; at most once every 30 seconds) |
+| Settings | Menu bar → *Asetukset…*, or ⚙ in the window (shown when the pointer is over the window) |
+| Move the window | Drag it from anywhere |
 
-Jos ajastin pysäytetään Toggl-sovelluksessa, muutos näkyy enintään neljän
-minuutin viiveellä. Tämä johtuu Toggl API:n pyyntörajoista (Free-tilillä 30
-pyyntöä tunnissa). Tämän sovelluksen kautta tehdyt muutokset näkyvät heti.
+If you stop the timer in the Toggl app, the change shows up here within
+four minutes. This is because of Toggl API rate limits (30 requests per
+hour on the Free plan). Changes made through this app show up immediately.
 
-## Vianetsintä
+## Troubleshooting
 
 **`failed to run 'cargo metadata' … No such file or directory`**
-Rust puuttuu tai `cargo` ei ole PATHissa. Asenna Rust ja lataa ympäristö:
+Rust is missing or `cargo` is not on your PATH. Install Rust and load its
+environment:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+```bash
 source "$HOME/.cargo/env"
+```
+
+```bash
 cargo --version
 ```
 
-Varmista myös, että Xcode Command Line Tools on asennettu (`xcode-select --install`).
+Also make sure the Xcode Command Line Tools are installed (`xcode-select --install`).
 
 **`npm warn allow-scripts …`**
-Uudet npm-versiot eivät aja pakettien asennusskriptejä ilman hyväksyntää.
-Varoitus ei yleensä estä kehitystä. Jos build valittaa esbuildista, hyväksy
-sen skripti ja asenna uudelleen:
+Recent npm versions do not run package install scripts without approval.
+The warning usually does not block development. If the build complains
+about esbuild, approve its script and reinstall:
 
 ```bash
 npm approve-scripts esbuild
+```
+
+```bash
 npm install
 ```
 
-## Kehitys
+## Development
 
 ```bash
-npm test -- --watch=false     # Angular-testit (Vitest)
+npm test -- --watch=false     # Angular tests (Vitest)
 npm run format:check          # Prettier
-npm run build                 # Angular-build (tarvitaan ennen cargo-komentoja)
+npm run build                 # Angular build (needed before cargo commands)
 
 cd src-tauri
-cargo test                    # Rust-testit (laskenta + mockattu Toggl API)
+cargo test                    # Rust tests (computation + mocked Toggl API)
 cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
 
-Linuxilla Rust-koodin kääntäminen vaatii Taurin
-[järjestelmäriippuvuudet](https://tauri.app/start/prerequisites/#linux)
-(esim. `libwebkit2gtk-4.1-dev`). Sovellusta tuetaan ja testataan vain
-macOS:llä.
+Run the `cargo` commands in the `src-tauri` directory, where `Cargo.toml` is.
 
-Arkkitehtuuri ja koodikonventiot on kuvattu tiedostossa
-[CLAUDE.md](CLAUDE.md). Alkuperäinen suunnitelma ja toteutuksen tarkennukset
-ovat tiedostossa [PLAN.md](PLAN.md).
+On Linux, compiling the Rust code needs Tauri's
+[system dependencies](https://tauri.app/start/prerequisites/#linux)
+(for example `libwebkit2gtk-4.1-dev`). The app itself is supported and
+tested only on macOS.
 
-### Projektin rakenne
+The architecture and code conventions are described in
+[CLAUDE.md](CLAUDE.md). The original plan and the decisions made during
+implementation are in [PLAN.md](PLAN.md) (in Finnish).
+
+### Project structure
 
 ```
-src/              Angular-käyttöliittymä (kelluva ikkuna ja asetukset)
-src-tauri/        Rust-backend: tila, ajastus, Toggl-client, tray
-PLAN.md           Toteutussuunnitelma
-CLAUDE.md         Arkkitehtuuri ja konventiot
+src/              Angular UI (floating window and settings)
+src-tauri/        Rust backend: state, timing, Toggl client, tray
+PLAN.md           Implementation plan (in Finnish)
+CLAUDE.md         Architecture and conventions
 ```
 
-## Tietosuoja
+## Privacy
 
-- Sovellus keskustelee vain Toggl API:n kanssa (`focus.toggl.com` tai `api.track.toggl.com`).
-- API-avain on vain macOS:n avainnipussa.
-- Asetukset (tavoitteet, näyttöasetukset sekä Toggl-tilin tiedot ja workspace) tallennetaan sovelluksen datahakemistoon (`~/Library/Application Support/io.github.antsim.tyoaikalaskuri/`).
+- The app talks only to the Toggl API (`focus.toggl.com` or `api.track.toggl.com`).
+- The API key is kept only in the macOS Keychain.
+- Settings (targets, display options, and the Toggl account details and workspace) are stored in the app's data directory (`~/Library/Application Support/io.github.antsim.tyoaikalaskuri/`).
 
-## Lisenssi
+## License
 
 [MIT](LICENSE)
