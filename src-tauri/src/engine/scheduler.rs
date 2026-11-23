@@ -237,17 +237,14 @@ impl SyncEngine {
     ///
     /// If less than [`FINISH_DAY_WINDOW_SECS`] of the day's target is left,
     /// the entry is ended in the future, at the moment the target is reached
-    /// (Toggl Track only), so the user can wrap up a little early.
+    /// so the user can wrap up a little early. If Toggl refuses that end
+    /// time, the timer stops now instead.
     ///
     /// [`FINISH_DAY_WINDOW_SECS`]: super::compute::FINISH_DAY_WINDOW_SECS
     pub async fn stop_timer(&mut self, targets: &WeeklyTargets) -> Result<(), ControlError> {
         let now = self.clock.now().trunc_subsecs(0);
         let today = DayBounds::containing(now, self.tz);
-        let completion = self
-            .client
-            .supports_scheduled_stop()
-            .then(|| day_completion_stop(self.day.as_ref(), now, self.tz, targets))
-            .flatten();
+        let mut completion = day_completion_stop(self.day.as_ref(), now, self.tz, targets);
         let stop_at = completion.unwrap_or(now);
 
         let previous = self.day.clone();
@@ -262,7 +259,7 @@ impl SyncEngine {
         };
         self.publish();
 
-        let result = match completion {
+        let mut result = match completion {
             Some(stop) => {
                 log::info!(
                     "{} s left of the target; ending the entry at {stop}",
@@ -278,6 +275,30 @@ impl SyncEngine {
                     .await
             }
         };
+        if completion.is_some()
+            && matches!(
+                &result,
+                Err(TogglError::Status {
+                    status: 400..=499,
+                    ..
+                })
+            )
+        {
+            // Toggl refused the end time (e.g. one in the future): stop now.
+            if let Err(err) = &result {
+                log::warn!("scheduled stop refused ({err}); stopping now instead");
+            }
+            completion = None;
+            self.day.clone_from(&previous);
+            if let Some(day) = self.day.as_mut() {
+                day.stop_running(now, &today);
+            }
+            self.publish();
+            result = self
+                .client
+                .stop_time_entry(running.workspace_id, entry_id)
+                .await;
+        }
         self.full_sync_due = true;
         match self.track(result, now) {
             Ok(()) => {
@@ -306,6 +327,13 @@ impl SyncEngine {
         if scheduled.stop <= now {
             return Ok(());
         }
+        if !self.client.can_move_entry_stop() {
+            log::warn!(
+                "resumed before the scheduled end {}; this Toggl product cannot move it back",
+                scheduled.stop
+            );
+            return Ok(());
+        }
         let previous = self.day.clone();
         let today = DayBounds::containing(now, self.tz);
         if let Some(day) = self.day.as_mut() {
@@ -315,7 +343,7 @@ impl SyncEngine {
 
         let result = self
             .client
-            .stop_time_entry_at(
+            .move_entry_stop(
                 scheduled.workspace_id,
                 scheduled.entry_id,
                 scheduled.start,

@@ -568,32 +568,25 @@ async fn resuming_before_the_scheduled_end_moves_it_back() {
     assert_eq!(day.running.and_then(|r| r.id), Some(8));
 }
 
-#[tokio::test]
-async fn toggl_2_pause_near_the_end_stops_now() {
-    let server = MockServer::start().await;
+/// An engine using a Toggl 2.0 key, with one entry running since 08:00.
+async fn focus_engine(server: &MockServer) -> (SyncEngine, Arc<ManualClock>) {
     Mock::given(method("GET"))
         .and(path("/users/me/landing-workspace"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "organization_id": 10, "workspace_id": 20, "reason": "default"
         })))
-        .mount(&server)
+        .mount(server)
         .await;
     Mock::given(method("GET"))
         .and(path("/organizations/10/workspaces/20/time-entries/stream"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
             {"id": 3, "workspace_id": 20, "start": local(8, 0), "type": "activity"}
         ])))
-        .mount(&server)
-        .await;
-    Mock::given(method("POST"))
-        .and(path("/organizations/10/workspaces/20/tracking/stop"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
-        .expect(1)
-        .mount(&server)
+        .mount(server)
         .await;
 
     let clock = Arc::new(ManualClock::new(local(9, 0)));
-    let client = crate::toggl::client::testing::client(&server, "toggl_sk_test", clock.clone());
+    let client = crate::toggl::client::testing::client(server, "toggl_sk_test", clock.clone());
     let mut engine = SyncEngine::new(
         Arc::new(client),
         clock.clone(),
@@ -602,6 +595,25 @@ async fn toggl_2_pause_near_the_end_stops_now() {
         None,
     );
     engine.tick().await;
+    (engine, clock)
+}
+
+const FOCUS_STOP: &str = "/organizations/10/workspaces/20/tracking/stop";
+
+#[tokio::test]
+async fn toggl_2_pause_near_the_end_sends_the_end_time() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(FOCUS_STOP))
+        .and(body_json(
+            serde_json::json!({"end": "2026-01-05T13:30:00Z"}),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let (mut engine, clock) = focus_engine(&server).await;
+
     clock.set(local(15, 20));
     engine
         .stop_timer(&WeeklyTargets::default())
@@ -609,5 +621,71 @@ async fn toggl_2_pause_near_the_end_stops_now() {
         .expect("stopped");
 
     let day = engine.subscribe().borrow().day.clone().expect("day");
+    assert_eq!(day.last_stop, Some(local(15, 30)));
+    assert_eq!(day.completed_secs, 27000);
+}
+
+#[tokio::test]
+async fn refused_end_time_falls_back_to_stopping_now() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(FOCUS_STOP))
+        .and(body_json(
+            serde_json::json!({"end": "2026-01-05T13:30:00Z"}),
+        ))
+        .respond_with(ResponseTemplate::new(400).set_body_string("end is in the future"))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(FOCUS_STOP))
+        .and(body_json(serde_json::json!({})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let (mut engine, clock) = focus_engine(&server).await;
+
+    clock.set(local(15, 20));
+    engine
+        .stop_timer(&WeeklyTargets::default())
+        .await
+        .expect("stopped");
+
+    let snapshot = engine.subscribe().borrow().clone();
+    let day = snapshot.day.expect("day");
     assert_eq!(day.last_stop, Some(local(15, 20)));
+    assert_eq!(day.completed_secs, 26400);
+    assert_eq!(snapshot.sync.warning, SyncWarning::None);
+}
+
+#[tokio::test]
+async fn toggl_2_resume_before_the_scheduled_end_just_starts() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(FOCUS_STOP))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/organizations/10/workspaces/20/tracking/start"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": 4, "workspace_id": 20, "start": local(15, 25), "type": "activity"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let (mut engine, clock) = focus_engine(&server).await;
+
+    clock.set(local(15, 20));
+    engine
+        .stop_timer(&WeeklyTargets::default())
+        .await
+        .expect("stopped");
+    clock.set(local(15, 25));
+    engine.resume_timer().await.expect("resumed");
+
+    let day = engine.subscribe().borrow().day.clone().expect("day");
+    assert_eq!(day.running.and_then(|r| r.id), Some(4));
 }

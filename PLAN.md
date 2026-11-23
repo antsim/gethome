@@ -312,7 +312,7 @@ Toggl 2.0 (`focus.toggl.com`) on eri tuote kuin Toggl Track, ja sillä on oma AP
 | Päivän kirjaukset | `GET /organizations/{org}/workspaces/{ws}/time-entries/stream?date_from&date_to&include_taskless=true` (yksi pyyntö, ei sivutusta) |
 | Käynnissä oleva ajastin | `GET …/tracking/current` (204 = ei ajastinta) |
 | Käynnistys | `POST …/tracking/start` (`type: "activity"`) |
-| Pysäytys | `POST …/tracking/stop` (404 = jo pysäytetty) |
+| Pysäytys | `POST …/tracking/stop`, valinnainen body `{"end": "<RFC 3339>"}` (404 = jo pysäytetty) |
 | Viimeisin kirjaus jatkamista varten | `GET …/time-entries?order_by=-start&per_page=20` |
 
 - Autentikointi: `Authorization: Bearer toggl_sk_…`.
@@ -326,7 +326,7 @@ Toggl 2.0 (`focus.toggl.com`) on eri tuote kuin Toggl Track, ja sillä on oma AP
 **Päivän täyttäminen tauolle siirryttäessä**
 
 - Jos tauko (⏸) painetaan, kun päivän tavoitteesta on jäljellä **alle 15 min**, käynnissä oleva kirjaus päätetään tulevaisuuteen eli siihen hetkeen, jolloin tavoite täyttyy. Näin koneen voi sulkea hieman etuajassa ja päivä on silti täysi. Jos aikaa on 15 min tai enemmän tai tavoite on jo täynnä, ajastin pysäytetään heti normaalisti.
-- Toggl Trackissa tämä tehdään kutsulla `PUT /workspaces/{wid}/time_entries/{id}` (`stop` + `duration`). Pyyntöjä kuluu yhtä monta kuin tavallisessa pysäytyksessä.
-- Jos työtä jatketaan ennen tulevaa loppuaikaa, edellisen kirjauksen loppu siirretään ensin jatkamishetkeen (yksi ylimääräinen `PUT`), jotta kirjaukset eivät mene päällekkäin.
-- Toggl 2.0:ssa ominaisuus ei ole vielä käytössä, koska kirjauksen loppuajan muokkauskutsua ei ole varmistettu API-dokumentaatiosta. Ajastin pysähtyy siellä heti kuten ennenkin.
+- Toggl Trackissa tämä tehdään kutsulla `PUT /workspaces/{wid}/time_entries/{id}` (`stop` + `duration`), Toggl 2.0:ssa kutsulla `POST …/tracking/stop` bodylla `{"end": "<aika>"}`. Pyyntöjä kuluu yhtä monta kuin tavallisessa pysäytyksessä.
+- Jos Toggl hylkää loppuajan (HTTP 4xx, esim. jos tulevaa aikaa ei sallita), ajastin pysäytetään heti tavalliseen tapaan.
+- Jos työtä jatketaan ennen tulevaa loppuaikaa, Toggl Trackissa edellisen kirjauksen loppu siirretään ensin jatkamishetkeen (yksi ylimääräinen `PUT`), jotta kirjaukset eivät mene päällekkäin. Toggl 2.0:ssa päättyneen kirjauksen muokkauskutsua ei ole vielä otettu käyttöön, joten siellä uusi kirjaus vain käynnistetään.
 - Raja on vakio `FINISH_DAY_WINDOW_SECS` (`engine/compute.rs`).

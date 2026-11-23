@@ -22,7 +22,8 @@ is running, the countdown stops and the app shows **"Tauolla"** (on a break).
 - When you pause with less than 15 minutes of the day's target left, the
   entry ends at the moment the target is reached instead of now. You can
   shut down a little early and still have a full day. If you resume before
-  that time, the entry ends when you resume instead. (Toggl Track only for now.)
+  that time, the entry ends when you resume instead (Toggl Track; with
+  Toggl 2.0 the new entry simply starts).
 - A daily target per weekday (default Mon–Fri 7:30, Sat–Sun 0 h).
 - Estimated finishing time ("valmis klo 16:05", done at 16:05) and break length.
 - Light and dark theme, adjustable opacity, launch at login.
