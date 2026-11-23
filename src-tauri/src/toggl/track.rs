@@ -72,6 +72,14 @@ struct NewTimeEntry<'a> {
     duration: i64,
 }
 
+/// Body of `PUT /workspaces/{wid}/time_entries/{id}` when only the end
+/// changes.
+#[derive(Debug, Serialize)]
+struct SetStop {
+    stop: String,
+    duration: i64,
+}
+
 #[derive(Debug, Deserialize)]
 struct Me {
     #[serde(default)]
@@ -193,6 +201,30 @@ impl TogglClient {
             &[],
         )?;
         self.send(credentials, Method::PATCH, url, None::<&()>)
+            .await
+            .map(drop)
+    }
+
+    /// `PUT /workspaces/{wid}/time_entries/{id}` with a new end time. Toggl
+    /// requires `stop` and `duration` to agree, so both are sent.
+    pub(super) async fn track_set_stop(
+        &self,
+        credentials: &Credentials,
+        workspace_id: i64,
+        entry_id: i64,
+        start: DateTime<Utc>,
+        stop: DateTime<Utc>,
+    ) -> Result<()> {
+        let url = self.url(
+            Flavor::Track,
+            &format!("/workspaces/{workspace_id}/time_entries/{entry_id}"),
+            &[],
+        )?;
+        let body = SetStop {
+            stop: rfc3339(stop),
+            duration: (stop - start).num_seconds().max(0),
+        };
+        self.send(credentials, Method::PUT, url, Some(&body))
             .await
             .map(drop)
     }

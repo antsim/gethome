@@ -64,6 +64,8 @@ pub enum TogglError {
     Url(#[from] url::ParseError),
     #[error("the Toggl account has no accessible workspace")]
     NoWorkspace,
+    #[error("not supported by this Toggl product: {0}")]
+    Unsupported(&'static str),
 }
 
 impl TogglError {
@@ -217,6 +219,32 @@ impl TogglClient {
         match credentials.flavor {
             Flavor::Track => self.track_stop(&credentials, workspace_id, entry_id).await,
             Flavor::Focus => self.focus_stop(&credentials).await,
+        }
+    }
+
+    /// Whether [`Self::stop_time_entry_at`] is available for the stored token.
+    pub fn supports_scheduled_stop(&self) -> bool {
+        self.credentials()
+            .is_ok_and(|credentials| credentials.flavor == Flavor::Track)
+    }
+
+    /// Ends an entry (running or finished) at `stop`, which may be in the
+    /// future. Only Toggl Track supports this; see
+    /// [`Self::supports_scheduled_stop`].
+    pub async fn stop_time_entry_at(
+        &self,
+        workspace_id: i64,
+        entry_id: i64,
+        start: DateTime<Utc>,
+        stop: DateTime<Utc>,
+    ) -> Result<()> {
+        let credentials = self.credentials()?;
+        match credentials.flavor {
+            Flavor::Track => {
+                self.track_set_stop(&credentials, workspace_id, entry_id, start, stop)
+                    .await
+            }
+            Flavor::Focus => Err(TogglError::Unsupported("scheduled stop")),
         }
     }
 

@@ -6,7 +6,7 @@ use crate::engine::state::tests::entry;
 use crate::toggl::{track, TimeEntry};
 use chrono::TimeZone;
 use chrono_tz::Europe::Helsinki;
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const ENTRIES: &str = "/me/time_entries";
@@ -315,7 +315,10 @@ async fn stop_timer_updates_state_optimistically_and_verifies() {
         .await;
 
     h.engine.tick().await;
-    h.engine.stop_timer().await.expect("stopped");
+    h.engine
+        .stop_timer(&WeeklyTargets::default())
+        .await
+        .expect("stopped");
 
     let day = h.snapshot().day.expect("day");
     assert!(day.running.is_none());
@@ -337,7 +340,11 @@ async fn failed_stop_restores_previous_state() {
 
     h.engine.tick().await;
     let before = h.snapshot().day;
-    assert!(h.engine.stop_timer().await.is_err());
+    assert!(h
+        .engine
+        .stop_timer(&WeeklyTargets::default())
+        .await
+        .is_err());
     assert_eq!(h.snapshot().day, before);
     assert_eq!(h.snapshot().sync.warning, SyncWarning::Offline);
 }
@@ -443,4 +450,164 @@ async fn syncs_with_toggl_2_api_key() {
     let day = engine.subscribe().borrow().day.clone().expect("day");
     assert_eq!(day.completed_secs, 3600, "the break does not count");
     assert_eq!(day.running.and_then(|r| r.id), Some(3));
+}
+
+/// Local time on the test day (Helsinki is UTC+2 in January).
+fn local(h: u32, m: u32) -> DateTime<Utc> {
+    Helsinki
+        .with_ymd_and_hms(2026, 1, 5, h, m, 0)
+        .unwrap()
+        .with_timezone(&Utc)
+}
+
+#[tokio::test]
+async fn pause_near_the_end_ends_the_entry_when_the_target_is_reached() {
+    let mut h = Harness::new().await;
+    mount(&h.server, ENTRIES, json_entries(&[running_entry(7)])).await;
+    // 7:30 target from 08:00 is full at 15:30 local = 13:30 UTC.
+    Mock::given(method("PUT"))
+        .and(path("/workspaces/1/time_entries/7"))
+        .and(body_json(serde_json::json!({
+            "stop": "2026-01-05T13:30:00Z",
+            "duration": 27000
+        })))
+        .respond_with(json_entry(&entry(7, local(8, 0), Some(local(15, 30)))))
+        .expect(1)
+        .mount(&h.server)
+        .await;
+    Mock::given(method("PATCH"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&h.server)
+        .await;
+
+    h.engine.tick().await;
+    h.clock.set(local(15, 20));
+    h.engine
+        .stop_timer(&WeeklyTargets::default())
+        .await
+        .expect("stopped");
+
+    let day = h.snapshot().day.expect("day");
+    assert!(day.running.is_none());
+    assert_eq!(day.completed_secs, 27000);
+    assert_eq!(day.last_stop, Some(local(15, 30)));
+}
+
+#[tokio::test]
+async fn pause_with_more_time_left_stops_now() {
+    let mut h = Harness::new().await;
+    mount(&h.server, ENTRIES, json_entries(&[running_entry(7)])).await;
+    Mock::given(method("PATCH"))
+        .and(path("/workspaces/1/time_entries/7/stop"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&h.server)
+        .await;
+    Mock::given(method("PUT"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&h.server)
+        .await;
+
+    h.engine.tick().await;
+    h.clock.set(local(15, 15));
+    h.engine
+        .stop_timer(&WeeklyTargets::default())
+        .await
+        .expect("stopped");
+    assert_eq!(
+        h.snapshot().day.and_then(|d| d.last_stop),
+        Some(local(15, 15))
+    );
+}
+
+#[tokio::test]
+async fn resuming_before_the_scheduled_end_moves_it_back() {
+    let mut h = Harness::new().await;
+    mount(&h.server, ENTRIES, json_entries(&[running_entry(7)])).await;
+    Mock::given(method("PUT"))
+        .and(path("/workspaces/1/time_entries/7"))
+        .and(body_json(serde_json::json!({
+            "stop": "2026-01-05T13:30:00Z",
+            "duration": 27000
+        })))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&h.server)
+        .await;
+    // Resumed at 15:25: the first entry now ends then.
+    Mock::given(method("PUT"))
+        .and(path("/workspaces/1/time_entries/7"))
+        .and(body_json(serde_json::json!({
+            "stop": "2026-01-05T13:25:00Z",
+            "duration": 26700
+        })))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&h.server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/workspaces/1/time_entries"))
+        .respond_with(json_entry(&entry(8, local(15, 25), None)))
+        .expect(1)
+        .mount(&h.server)
+        .await;
+
+    h.engine.tick().await;
+    h.clock.set(local(15, 20));
+    h.engine
+        .stop_timer(&WeeklyTargets::default())
+        .await
+        .expect("stopped");
+    h.clock.set(local(15, 25));
+    h.engine.resume_timer().await.expect("resumed");
+
+    let day = h.snapshot().day.expect("day");
+    assert_eq!(day.completed_secs, 26700);
+    assert_eq!(day.running.and_then(|r| r.id), Some(8));
+}
+
+#[tokio::test]
+async fn toggl_2_pause_near_the_end_stops_now() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/users/me/landing-workspace"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "organization_id": 10, "workspace_id": 20, "reason": "default"
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/organizations/10/workspaces/20/time-entries/stream"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            {"id": 3, "workspace_id": 20, "start": local(8, 0), "type": "activity"}
+        ])))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/organizations/10/workspaces/20/tracking/stop"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let clock = Arc::new(ManualClock::new(local(9, 0)));
+    let client = crate::toggl::client::testing::client(&server, "toggl_sk_test", clock.clone());
+    let mut engine = SyncEngine::new(
+        Arc::new(client),
+        clock.clone(),
+        PollConfig::default(),
+        Helsinki,
+        None,
+    );
+    engine.tick().await;
+    clock.set(local(15, 20));
+    engine
+        .stop_timer(&WeeklyTargets::default())
+        .await
+        .expect("stopped");
+
+    let day = engine.subscribe().borrow().day.clone().expect("day");
+    assert_eq!(day.last_stop, Some(local(15, 20)));
 }

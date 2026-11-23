@@ -8,6 +8,11 @@ use super::calendar::DayBounds;
 use super::state::{DayState, SyncStatus, SyncWarning, TimerStatus};
 use crate::settings::WeeklyTargets;
 
+/// Pausing with less than this much of the target left stops the timer at
+/// the moment the target is reached instead of now. See
+/// [`day_completion_stop`].
+pub const FINISH_DAY_WINDOW_SECS: i64 = 15 * 60;
+
 /// Sent to the UI as the `timer-state` event once per second.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -80,6 +85,24 @@ pub fn compute(
         last_synced: sync.last_synced,
         sync_warning: sync.warning,
     }
+}
+
+/// When the timer is paused at `now`, the time it should be stopped at so
+/// that the day's target is exactly reached.
+///
+/// Returns `Some` only while a timer is running and less than
+/// [`FINISH_DAY_WINDOW_SECS`] of the target is left: the user is wrapping up
+/// a bit early and wants the day to be full. Otherwise the timer stops now.
+pub fn day_completion_stop(
+    day: Option<&DayState>,
+    now: DateTime<Utc>,
+    tz: Tz,
+    targets: &WeeklyTargets,
+) -> Option<DateTime<Utc>> {
+    let vm = compute(day, &SyncStatus::default(), now, tz, targets);
+    let wrapping_up =
+        vm.status == TimerStatus::Working && vm.remaining_secs < FINISH_DAY_WINDOW_SECS;
+    wrapping_up.then(|| now + Duration::seconds(vm.remaining_secs))
 }
 
 #[cfg(test)]
@@ -244,5 +267,57 @@ mod tests {
         );
         assert_eq!(vm.sync_warning, SyncWarning::Offline);
         assert_eq!(vm.last_synced, Some(at(5, 8, 0)));
+    }
+
+    fn completion_stop(day: &DayState, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
+        day_completion_stop(Some(day), now, Helsinki, &WeeklyTargets::default())
+    }
+
+    #[test]
+    fn pause_near_the_end_stops_when_the_target_is_reached() {
+        // 7:30 target, started 08:00: the day is full at 15:30.
+        let day = day_of((2026, 1, 5), &[entry(1, at(5, 8, 0), None)]);
+        assert_eq!(completion_stop(&day, at(5, 15, 16)), Some(at(5, 15, 30)));
+        assert_eq!(
+            completion_stop(&day, at(5, 15, 15) + Duration::seconds(1)),
+            Some(at(5, 15, 30))
+        );
+    }
+
+    #[test]
+    fn pause_with_fifteen_minutes_or_more_left_stops_now() {
+        let day = day_of((2026, 1, 5), &[entry(1, at(5, 8, 0), None)]);
+        assert_eq!(completion_stop(&day, at(5, 15, 15)), None);
+        assert_eq!(completion_stop(&day, at(5, 12, 0)), None);
+    }
+
+    #[test]
+    fn pause_after_the_target_stops_now() {
+        let day = day_of((2026, 1, 5), &[entry(1, at(5, 8, 0), None)]);
+        assert_eq!(completion_stop(&day, at(5, 15, 30)), None);
+        assert_eq!(completion_stop(&day, at(5, 16, 0)), None);
+    }
+
+    #[test]
+    fn completion_stop_counts_earlier_entries() {
+        let day = day_of(
+            (2026, 1, 5),
+            &[
+                entry(1, at(5, 8, 0), Some(at(5, 12, 0))),
+                entry(2, at(5, 12, 30), None),
+            ],
+        );
+        // 4 h before lunch + 3 h 20 min after it: 10 min left at 15:50.
+        assert_eq!(completion_stop(&day, at(5, 15, 50)), Some(at(5, 16, 0)));
+    }
+
+    #[test]
+    fn completion_stop_needs_a_running_timer_and_a_target() {
+        let on_break = day_of((2026, 1, 5), &[entry(1, at(5, 8, 0), Some(at(5, 15, 25)))]);
+        assert_eq!(completion_stop(&on_break, at(5, 15, 26)), None);
+
+        // Saturday has a zero target: any work is overtime.
+        let saturday = day_of((2026, 1, 10), &[entry(1, at(10, 10, 0), None)]);
+        assert_eq!(completion_stop(&saturday, at(10, 10, 5)), None);
     }
 }

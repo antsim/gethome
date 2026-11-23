@@ -322,3 +322,11 @@ Toggl 2.0 (`focus.toggl.com`) on eri tuote kuin Toggl Track, ja sillä on oma AP
 - Toggl 2.0 ei kerro käyttäjän nimeä, joten asetuksissa näytetään tuote ja workspace.
 - Sovellus lukee yhden workspacen eli sen, jonka `landing-workspace` palauttaa.
 - Yleinen korjaus: jos ajastin on käynnistetty ennen haettua aikaväliä, `current`-kirjaus otetaan tilaan suoraan, jotta seuraava pollaus ei käynnistä uutta täyttä hakua.
+
+**Päivän täyttäminen tauolle siirryttäessä**
+
+- Jos tauko (⏸) painetaan, kun päivän tavoitteesta on jäljellä **alle 15 min**, käynnissä oleva kirjaus päätetään tulevaisuuteen eli siihen hetkeen, jolloin tavoite täyttyy. Näin koneen voi sulkea hieman etuajassa ja päivä on silti täysi. Jos aikaa on 15 min tai enemmän tai tavoite on jo täynnä, ajastin pysäytetään heti normaalisti.
+- Toggl Trackissa tämä tehdään kutsulla `PUT /workspaces/{wid}/time_entries/{id}` (`stop` + `duration`). Pyyntöjä kuluu yhtä monta kuin tavallisessa pysäytyksessä.
+- Jos työtä jatketaan ennen tulevaa loppuaikaa, edellisen kirjauksen loppu siirretään ensin jatkamishetkeen (yksi ylimääräinen `PUT`), jotta kirjaukset eivät mene päällekkäin.
+- Toggl 2.0:ssa ominaisuus ei ole vielä käytössä, koska kirjauksen loppuajan muokkauskutsua ei ole varmistettu API-dokumentaatiosta. Ajastin pysähtyy siellä heti kuten ennenkin.
+- Raja on vakio `FINISH_DAY_WINDOW_SECS` (`engine/compute.rs`).

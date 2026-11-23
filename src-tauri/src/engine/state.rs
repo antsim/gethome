@@ -154,6 +154,15 @@ impl DayState {
         Some(running)
     }
 
+    /// Optimistically moves the end of the latest finished entry from `from`
+    /// back to `to` (used when a future stop time is withdrawn).
+    pub fn move_last_stop(&mut self, from: DateTime<Utc>, to: DateTime<Utc>, day: &DayBounds) {
+        self.completed_secs -= day.overlap_secs(to, from);
+        if self.last_stop == Some(from) {
+            self.last_stop = Some(to);
+        }
+    }
+
     /// Optimistically marks a new entry as running from `at`.
     pub fn start_running(&mut self, at: DateTime<Utc>, template: EntryTemplate) {
         self.running = Some(RunningEntry {

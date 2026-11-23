@@ -37,6 +37,10 @@ pub mod testing {
             let mut now = self.0.lock().expect("clock mutex poisoned");
             *now += by;
         }
+
+        pub fn set(&self, to: DateTime<Utc>) {
+            *self.0.lock().expect("clock mutex poisoned") = to;
+        }
     }
 
     impl Clock for ManualClock {
