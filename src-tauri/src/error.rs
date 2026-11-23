@@ -79,6 +79,7 @@ fn toggl_code(err: &TogglError) -> &'static str {
         TogglError::QuotaExceeded | TogglError::RateLimited => "rateLimited",
         TogglError::Network(_) | TogglError::Status { .. } => "offline",
         TogglError::NoWorkspace => "noWorkspace",
+        TogglError::Unsupported(_) => "unsupported",
         TogglError::Decode(_) | TogglError::Url(_) => "invalidResponse",
     }
 }
@@ -96,6 +97,7 @@ fn toggl_message(err: &TogglError) -> String {
             None => format!("Toggl palautti virheen (HTTP {status})."),
         },
         TogglError::NoWorkspace => "Toggl-tililläsi ei ole käytettävissä olevaa workspacea.".into(),
+        TogglError::Unsupported(_) => "Toiminto ei ole käytettävissä tässä Toggl-versiossa.".into(),
         TogglError::Decode(_) | TogglError::Url(_) => {
             "Toggl palautti odottamattoman vastauksen.".into()
         }

@@ -64,6 +64,8 @@ pub enum TogglError {
     Url(#[from] url::ParseError),
     #[error("the Toggl account has no accessible workspace")]
     NoWorkspace,
+    #[error("not supported by this Toggl product: {0}")]
+    Unsupported(&'static str),
 }
 
 impl TogglError {
@@ -216,7 +218,51 @@ impl TogglClient {
         let credentials = self.credentials()?;
         match credentials.flavor {
             Flavor::Track => self.track_stop(&credentials, workspace_id, entry_id).await,
-            Flavor::Focus => self.focus_stop(&credentials).await,
+            Flavor::Focus => self.focus_stop(&credentials, None).await,
+        }
+    }
+
+    /// Stops the running entry with its end at `stop`, which may be in the
+    /// future. `start` is the entry's start time.
+    pub async fn stop_time_entry_at(
+        &self,
+        workspace_id: i64,
+        entry_id: i64,
+        start: DateTime<Utc>,
+        stop: DateTime<Utc>,
+    ) -> Result<()> {
+        let credentials = self.credentials()?;
+        match credentials.flavor {
+            Flavor::Track => {
+                self.track_set_stop(&credentials, workspace_id, entry_id, start, stop)
+                    .await
+            }
+            Flavor::Focus => self.focus_stop(&credentials, Some(stop)).await,
+        }
+    }
+
+    /// Whether [`Self::move_entry_stop`] is available for the stored token.
+    pub fn can_move_entry_stop(&self) -> bool {
+        self.credentials()
+            .is_ok_and(|credentials| credentials.flavor == Flavor::Track)
+    }
+
+    /// Changes the end of a finished entry. Only Toggl Track supports this;
+    /// see [`Self::can_move_entry_stop`].
+    pub async fn move_entry_stop(
+        &self,
+        workspace_id: i64,
+        entry_id: i64,
+        start: DateTime<Utc>,
+        stop: DateTime<Utc>,
+    ) -> Result<()> {
+        let credentials = self.credentials()?;
+        match credentials.flavor {
+            Flavor::Track => {
+                self.track_set_stop(&credentials, workspace_id, entry_id, start, stop)
+                    .await
+            }
+            Flavor::Focus => Err(TogglError::Unsupported("editing a finished entry")),
         }
     }
 

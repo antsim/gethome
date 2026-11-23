@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Menu bar app that shows how much of today's working time is left, based on Toggl Track"
 authors = ["Antti Simonen"]
 license = "MIT"
-repository = "https://github.com/antsim/GetHome"
+repository = "https://github.com/antsim/gethome"
 edition = "2021"
 rust-version = "1.82"
 

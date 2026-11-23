@@ -111,6 +111,13 @@ struct StartTracking<'a> {
     kind: &'static str,
 }
 
+/// Body of `POST …/tracking/stop`.
+#[derive(Debug, Serialize)]
+struct StopTracking {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    end: Option<String>,
+}
+
 impl TogglClient {
     pub(super) async fn focus_account(&self, credentials: &Credentials) -> Result<Account> {
         let context = self.fetch_focus_context(credentials).await?;
@@ -233,14 +240,22 @@ impl TogglClient {
         }))
     }
 
-    pub(super) async fn focus_stop(&self, credentials: &Credentials) -> Result<()> {
+    /// `POST …/tracking/stop`. With `end`, the entry ends then (possibly in
+    /// the future) instead of now.
+    pub(super) async fn focus_stop(
+        &self,
+        credentials: &Credentials,
+        end: Option<DateTime<Utc>>,
+    ) -> Result<()> {
         let context = self.focus_context(credentials).await?;
         let url = self.url(
             Flavor::Focus,
             &entries_path(&context, "/tracking/stop"),
             &[],
         )?;
-        let body = serde_json::json!({});
+        let body = StopTracking {
+            end: end.map(rfc3339),
+        };
         match self.send(credentials, Method::POST, url, Some(&body)).await {
             Ok(_) => Ok(()),
             // 404: not tracking, i.e. already stopped elsewhere.

@@ -27,7 +27,7 @@ use crate::engine::{
 use crate::error::AppError;
 use crate::settings::persistence::SettingsRepository;
 use crate::settings::secrets::{KeychainStore, SecretStore};
-use crate::settings::{system_time_zone, Settings};
+use crate::settings::{system_time_zone, Settings, WeeklyTargets};
 use crate::toggl::{Account, TogglClient, TogglError};
 use crate::{tray, windows};
 
@@ -43,7 +43,7 @@ type Reply<T> = oneshot::Sender<T>;
 
 enum EngineCommand {
     Refresh(Reply<Result<RefreshOutcome, TogglError>>),
-    Stop(Reply<Result<(), ControlError>>),
+    Stop(WeeklyTargets, Reply<Result<(), ControlError>>),
     Resume(Reply<Result<(), ControlError>>),
     TokenChanged(Option<i64>),
     TimeZoneChanged(Tz),
@@ -220,7 +220,10 @@ impl AppService {
     }
 
     pub async fn stop_timer(&self) -> Result<(), AppError> {
-        Ok(self.request(EngineCommand::Stop).await??)
+        let targets = self.settings.borrow().daily_targets;
+        Ok(self
+            .request(|reply| EngineCommand::Stop(targets, reply))
+            .await??)
     }
 
     pub async fn resume_timer(&self) -> Result<(), AppError> {
@@ -286,8 +289,8 @@ async fn run_engine(mut engine: SyncEngine, mut commands: mpsc::Receiver<EngineC
                 Some(EngineCommand::Refresh(reply)) => {
                     let _ = reply.send(engine.refresh_now().await);
                 }
-                Some(EngineCommand::Stop(reply)) => {
-                    let _ = reply.send(engine.stop_timer().await);
+                Some(EngineCommand::Stop(targets, reply)) => {
+                    let _ = reply.send(engine.stop_timer(&targets).await);
                 }
                 Some(EngineCommand::Resume(reply)) => {
                     let _ = reply.send(engine.resume_timer().await);
