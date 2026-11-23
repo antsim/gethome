@@ -27,8 +27,8 @@ käynnissä, laskuri pysähtyy ja näytölle tulee teksti **"Tauolla"**.
 Vaatimukset: macOS 11+, [Node.js](https://nodejs.org/) 22+, [Rust](https://rustup.rs/) (stable) ja Xcode Command Line Tools.
 
 ```bash
-git clone https://github.com/antsim/GetHome.git
-cd GetHome
+git clone https://github.com/antsim/gethome.git
+cd gethome
 npm install
 ```
 
