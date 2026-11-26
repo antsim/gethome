@@ -102,18 +102,42 @@ button {
   text-overflow: ellipsis;
 }
 
-.settings {
+.card.expanded {
+  justify-content: flex-start;
+  padding: 10px 12px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.controls {
+  display: flex;
+  gap: 6px;
+}
+
+.finish {
+  font-size: 13px;
+}
+
+.corner {
   position: absolute;
   right: 6px;
   bottom: 4px;
-  font-size: 13px;
-  color: rgb(var(--muted-rgb));
-  opacity: 0;
-  transition: opacity 0.15s;
+  display: flex;
+  gap: 4px;
+
+  button {
+    font-size: 13px;
+    color: rgb(var(--muted-rgb));
+    opacity: 0;
+    transition: opacity 0.15s;
+
+    &:focus-visible {
+      opacity: 1;
+    }
+  }
 }
 
-.card:hover .settings,
-.settings:focus-visible {
+.card:hover .corner button {
   opacity: 1;
 }
 

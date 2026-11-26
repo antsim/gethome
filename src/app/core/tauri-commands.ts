@@ -5,6 +5,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type {
   AccountInfo,
   AppError,
+  DaySummary,
   RefreshOutcome,
   Settings,
   SettingsView,
@@ -64,6 +65,31 @@ export class TauriCommands {
 
   listTimezones(): Promise<string[]> {
     return invoke('list_timezones');
+  }
+
+  getDaySummary(): Promise<DaySummary> {
+    return invoke('get_day_summary');
+  }
+
+  isSummaryOpen(): Promise<boolean> {
+    return invoke('is_summary_open');
+  }
+
+  showSummary(): Promise<void> {
+    return invoke('show_summary');
+  }
+
+  closeSummary(): Promise<void> {
+    return invoke('close_summary');
+  }
+
+  /** Stops the timer (if running) and opens the day summary. */
+  finishDay(): Promise<void> {
+    return invoke('finish_day');
+  }
+
+  copyToClipboard(text: string): Promise<void> {
+    return invoke('copy_to_clipboard', { text });
   }
 
   listen<T>(event: string, handler: (payload: T) => void): Promise<UnlistenFn> {

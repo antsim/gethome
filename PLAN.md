@@ -330,3 +330,24 @@ Toggl 2.0 (`focus.toggl.com`) on eri tuote kuin Toggl Track, ja sillä on oma AP
 - Jos Toggl hylkää loppuajan (HTTP 4xx, esim. jos tulevaa aikaa ei sallita), ajastin pysäytetään heti tavalliseen tapaan.
 - Jos työtä jatketaan ennen tulevaa loppuaikaa, Toggl Trackissa edellisen kirjauksen loppu siirretään ensin jatkamishetkeen (yksi ylimääräinen `PUT`), jotta kirjaukset eivät mene päällekkäin. Toggl 2.0:ssa päättyneen kirjauksen muokkauskutsua ei ole vielä otettu käyttöön, joten siellä uusi kirjaus vain käynnistetään.
 - Raja on vakio `FINISH_DAY_WINDOW_SECS` (`engine/compute.rs`).
+
+**Päivän kirjaukset (tuntikirjausten kopiointi)**
+
+Päivän päätteeksi tunnit kirjataan Togglesta yrityksen omaan järjestelmään. Kelluva ikkuna laajenee yhteenvedoksi, josta kirjaukset voi kopioida suoraan.
+
+- Avautuminen:
+  - automaattisesti kerran päivässä, kun tavoite täyttyy (asetus *Näytä päivän kirjaukset automaattisesti*, oletuksena päällä)
+  - ⏹-painikkeesta (*Lopeta työpäivä*), joka pysäyttää ajastimen (päivän täyttölogiikka mukana) ja avaa yhteenvedon
+  - 📋-painikkeesta ja tray-valikon kohdista *Lopeta työpäivä* ja *Päivän kirjaukset…*
+- Ikkuna pysyy muiden päällä, joten kirjauksia voi kopioida yksi kerrallaan selaimeen. Sulkeminen (✕ tai Esc) palauttaa ikkunan käyttäjän omaan kokoon. Jos laajennettu ikkuna ei mahdu näytölle, sitä siirretään, ja siirto perutaan sulkiessa.
+- Taski on kaikki saman kuvauksen (trimmattuna) kirjaukset. Kirjaukset ilman kuvausta ovat yksi taski "(ei kuvausta)".
+- Pyöristys (`engine/summary.rs`, puhdas funktio):
+  1. Kokonaismäärä on tehty aika pyöristettynä **lähimpään** puoleen tuntiin (tasan 15 min pyöristyy ylös).
+  2. Jokainen taski saa ensin aikansa alaspäin pyöristettynä puoleen tuntiin. Puuttuvat puolituntiset jaetaan suurimman jäännöksen menetelmällä (tasatilanteessa pidempi taski, sitten aiempi). Rivit ovat aina tasa- tai puolitunteja, ja niiden summa on kokonaismäärä.
+  3. Nollaan pyöristyvät taskit (tyypillisesti alle 15 min) jätetään pois.
+- Rivit ovat siinä järjestyksessä, jossa taskeja on tehty. Rivillä näkyy myös todellinen Toggl-aika.
+- Rivin klikkaus kopioi `tunnit<TAB>kuvaus`, esim. `1,5` + tab + `Code review` (desimaalipilkku). *Kopioi kaikki* kopioi kaikki rivit rivinvaihdoin. Kopioidut rivit merkitään ✓:llä. Merkintä poistuu, jos rivin tunnit muuttuvat.
+- Leikepöytä: `tauri-plugin-clipboard-manager`, jota kutsutaan Rustista komennolla `copy_to_clipboard`.
+- Uusia API-kutsuja ei tarvita. `DayState` säilyttää päivän päättyneet kirjaukset (`segments`) ja käynnissä olevan kirjauksen kuvauksen.
+- Päivän tavoite on aina tasa- tai puolituntinen. Validointi hylkää muut arvot, ja vanhat tallennetut arvot pyöristetään lähimpään puoleen tuntiin.
+- Uusia komentoja: `get_day_summary`, `is_summary_open`, `show_summary`, `close_summary`, `finish_day` ja `copy_to_clipboard`. Event `summary-visibility` kertoo käyttöliittymälle, kumpi näkymä on auki.

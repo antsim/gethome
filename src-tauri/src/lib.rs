@@ -32,6 +32,7 @@ pub fn run() -> Result<(), tauri::Error> {
                 .build(),
         )
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(
             tauri_plugin_window_state::Builder::new()
                 // Visibility is persisted in our own settings.
@@ -78,6 +79,12 @@ pub fn run() -> Result<(), tauri::Error> {
             commands::toggle_window,
             commands::open_settings,
             commands::list_timezones,
+            commands::get_day_summary,
+            commands::is_summary_open,
+            commands::show_summary,
+            commands::close_summary,
+            commands::finish_day,
+            commands::copy_to_clipboard,
         ])
         .build(tauri::generate_context!())?;
 
@@ -113,6 +120,19 @@ fn handle_menu_event(app: &AppHandle, event: MenuEvent) {
                 }
             });
         }
+        tray::menu_id::FINISH_DAY => {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(err) = app.state::<AppService>().finish_day(&app).await {
+                    log::error!("could not finish the day: {err}");
+                }
+            });
+        }
+        tray::menu_id::SHOW_SUMMARY => {
+            if let Err(err) = service.show_summary(app) {
+                log::error!("could not show the day summary: {err}");
+            }
+        }
         tray::menu_id::REFRESH => {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
@@ -126,7 +146,13 @@ fn handle_menu_event(app: &AppHandle, event: MenuEvent) {
                 log::error!("could not open settings: {err}");
             }
         }
-        tray::menu_id::QUIT => app.exit(0),
+        tray::menu_id::QUIT => {
+            // Restore the compact size first so that window-state saves it.
+            if let Err(err) = service.close_summary(app) {
+                log::warn!("could not close the day summary: {err}");
+            }
+            app.exit(0);
+        }
         other => log::debug!("unhandled menu item {other}"),
     }
 }

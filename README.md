@@ -24,7 +24,14 @@ is running, the countdown stops and the app shows **"Tauolla"** (on a break).
   shut down a little early and still have a full day. If you resume before
   that time, the entry ends when you resume instead (Toggl Track; with
   Toggl 2.0 the new entry simply starts).
-- A daily target per weekday (default Mon–Fri 7:30, Sat–Sun 0 h).
+- Day summary for timesheets ("Päivän kirjaukset", the day's entries):
+  today's Toggl entries grouped by description and rounded to half
+  hours so that they add up to the day's total (rounded to the nearest
+  half hour). Click a row to copy `hours<TAB>description` (e.g.
+  `1,5` + tab + `Code review`), or copy all rows at once. The summary opens when the
+  target is reached, from the ⏹ button ("Lopeta työpäivä", finish the
+  day), from 📋 or from the menu bar.
+- A daily target per weekday in half hours (default Mon–Fri 7:30, Sat–Sun 0 h).
 - Estimated finishing time ("valmis klo 16:05", done at 16:05) and break length.
 - Light and dark theme, adjustable opacity, launch at login.
 - Fewer than 20 Toggl API requests per hour in normal use. Rate limits, network outages and sleep are handled gracefully.

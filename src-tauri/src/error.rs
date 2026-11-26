@@ -26,6 +26,8 @@ pub enum AppError {
     Secret(#[from] SecretError),
     #[error("autostart: {0}")]
     Autostart(String),
+    #[error("clipboard: {0}")]
+    Clipboard(String),
     #[error(transparent)]
     Tauri(#[from] tauri::Error),
     #[error("the background engine is not running")]
@@ -45,6 +47,7 @@ impl AppError {
             Self::Persistence(_) => "storage",
             Self::Secret(_) => "keychain",
             Self::Autostart(_) => "autostart",
+            Self::Clipboard(_) => "clipboard",
             Self::EmptyToken => "emptyToken",
             Self::Tauri(_) | Self::EngineStopped => "internal",
         }
@@ -57,7 +60,7 @@ impl AppError {
             Self::Control(ControlError::NotRunning) => "Ajastin ei ole käynnissä.".into(),
             Self::Control(ControlError::AlreadyRunning) => "Ajastin on jo käynnissä.".into(),
             Self::Settings(SettingsError::Target) => {
-                "Päivän tavoitteen on oltava 0–24 tuntia.".into()
+                "Päivän tavoitteen on oltava 0–24 tuntia puolen tunnin tarkkuudella.".into()
             }
             Self::Settings(SettingsError::TimeZone(name)) => {
                 format!("Tuntematon aikavyöhyke: {name}")
@@ -66,6 +69,7 @@ impl AppError {
             Self::Persistence(_) => "Asetusten tallennus epäonnistui.".into(),
             Self::Secret(_) => "Avainnippuun (Keychain) ei päästy käsiksi.".into(),
             Self::Autostart(_) => "Automaattisen käynnistyksen asetus epäonnistui.".into(),
+            Self::Clipboard(_) => "Leikepöydälle kopiointi epäonnistui.".into(),
             Self::EmptyToken => "API-token ei voi olla tyhjä.".into(),
             Self::Tauri(_) | Self::EngineStopped => "Sovelluksen sisäinen virhe.".into(),
         }

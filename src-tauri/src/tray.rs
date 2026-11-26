@@ -14,6 +14,8 @@ pub const TRAY_ID: &str = "main";
 pub mod menu_id {
     pub const TOGGLE_WINDOW: &str = "toggle-window";
     pub const TIMER_CONTROL: &str = "timer-control";
+    pub const FINISH_DAY: &str = "finish-day";
+    pub const SHOW_SUMMARY: &str = "show-summary";
     pub const REFRESH: &str = "refresh";
     pub const SETTINGS: &str = "settings";
     pub const QUIT: &str = "quit";
@@ -101,6 +103,20 @@ pub fn create(
         true,
         None::<&str>,
     )?;
+    let finish_day = MenuItem::with_id(
+        app,
+        menu_id::FINISH_DAY,
+        "Lopeta työpäivä",
+        true,
+        None::<&str>,
+    )?;
+    let show_summary = MenuItem::with_id(
+        app,
+        menu_id::SHOW_SUMMARY,
+        "Päivän kirjaukset…",
+        true,
+        None::<&str>,
+    )?;
     let refresh = MenuItem::with_id(app, menu_id::REFRESH, "Päivitä nyt", true, None::<&str>)?;
     let settings = MenuItem::with_id(
         app,
@@ -116,6 +132,9 @@ pub fn create(
             &toggle_window,
             &timer_control,
             &refresh,
+            &PredefinedMenuItem::separator(app)?,
+            &finish_day,
+            &show_summary,
             &PredefinedMenuItem::separator(app)?,
             &settings,
             &PredefinedMenuItem::separator(app)?,

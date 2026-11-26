@@ -15,6 +15,8 @@ export interface TimerView {
   running: boolean;
   /** Whether stop/resume is possible (requires a working token). */
   canControl: boolean;
+  /** Whether "finish the day" makes sense: there is work today. */
+  canFinish: boolean;
 }
 
 export function toTimerView(vm: TimerViewModel): TimerView {
@@ -24,7 +26,15 @@ export function toTimerView(vm: TimerViewModel): TimerView {
     vm.targetSecs > 0 ? Math.min(1, vm.workedSecs / vm.targetSecs) : vm.workedSecs > 0 ? 1 : 0;
   const canControl = vm.syncWarning !== 'noToken' && vm.syncWarning !== 'authError';
 
-  const base = { time, progress, warning: warningText(vm), running: vm.running, canControl };
+  const canFinish = vm.status !== 'NotStarted' && canControl;
+  const base = {
+    time,
+    progress,
+    warning: warningText(vm),
+    running: vm.running,
+    canControl,
+    canFinish,
+  };
   switch (vm.status) {
     case 'Working':
       return {

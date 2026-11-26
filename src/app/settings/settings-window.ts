@@ -18,6 +18,7 @@ import { formatMinutes, parseMinutes } from '../core/format';
 import {
   MAX_OPACITY,
   MIN_OPACITY,
+  TARGET_STEP_MINUTES,
   type AccountInfo,
   type Settings,
   type SettingsView,
@@ -53,8 +54,13 @@ export function describeAccount(account: AccountInfo): string {
     .join(' · ');
 }
 
-function durationValidator(control: AbstractControl<string>): ValidationErrors | null {
-  return parseMinutes(control.value) === null ? { duration: true } : null;
+/** A duration of whole or half hours, e.g. `7:30` or `6`. */
+export function targetValidator(control: AbstractControl<string>): ValidationErrors | null {
+  const minutes = parseMinutes(control.value);
+  if (minutes === null) {
+    return { duration: true };
+  }
+  return minutes % TARGET_STEP_MINUTES === 0 ? null : { halfHour: true };
 }
 
 /** Settings window: API token, daily targets and display options. */
@@ -78,13 +84,14 @@ export class SettingsWindow implements OnInit {
   protected readonly tokenForm = this.fb.group({ token: this.fb.control('') });
   protected readonly form = this.fb.group({
     dailyTargets: this.fb.array(
-      WEEKDAYS.map(() => this.fb.control('7:30', [Validators.required, durationValidator])),
+      WEEKDAYS.map(() => this.fb.control('7:30', [Validators.required, targetValidator])),
     ),
     useSystemTimezone: this.fb.control(true),
     timezone: this.fb.control(''),
     showSeconds: this.fb.control(true),
     autostart: this.fb.control(false),
     windowOpacity: this.fb.control(MAX_OPACITY),
+    autoShowSummary: this.fb.control(true),
   });
 
   protected readonly account = signal<AccountInfo | null>(null);
@@ -162,6 +169,7 @@ export class SettingsWindow implements OnInit {
       showSeconds: value.showSeconds,
       autostart: value.autostart,
       windowOpacity: value.windowOpacity,
+      autoShowSummary: value.autoShowSummary,
     };
     await this.run(this.saveFeedback, async () => {
       this.loaded = await this.commands.saveSettings(settings);
@@ -183,6 +191,7 @@ export class SettingsWindow implements OnInit {
       showSeconds: settings.showSeconds,
       autostart: settings.autostart,
       windowOpacity: settings.windowOpacity,
+      autoShowSummary: settings.autoShowSummary,
     });
   }
 

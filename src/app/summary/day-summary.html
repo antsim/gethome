@@ -1,0 +1,81 @@
+<section class="summary" aria-labelledby="summary-heading" data-tauri-drag-region>
+  <header class="head" data-tauri-drag-region>
+    <div class="heading" data-tauri-drag-region>
+      <h1 id="summary-heading" data-tauri-drag-region>
+        Päivän kirjaukset
+        @if (view(); as v) {
+          <span data-tauri-drag-region> · {{ v.dateLabel }}</span>
+        }
+      </h1>
+      @if (view(); as v) {
+        <p class="totals" data-tauri-drag-region>{{ v.totals }}</p>
+      }
+    </div>
+    <button
+      type="button"
+      class="close"
+      aria-label="Sulje yhteenveto"
+      title="Sulje (Esc)"
+      (click)="close()"
+    >
+      ✕
+    </button>
+  </header>
+
+  @if (view(); as v) {
+    @if (v.running) {
+      <p class="running">
+        <span>Ajastin käy – luvut päivittyvät</span>
+        <button type="button" [disabled]="pending()" (click)="stopTimer()">⏸ Pysäytä</button>
+      </p>
+    }
+
+    @if (v.rows.length > 0) {
+      <ul class="tasks">
+        @for (row of v.rows; track row.key) {
+          <li>
+            <button
+              type="button"
+              class="task"
+              [class.copied]="copied().has(row.key)"
+              [class.flash]="flash() === row.key || flash() === 'all'"
+              [title]="'Kopioi: ' + row.hours + ' ⇥ ' + row.title"
+              (click)="copy(row)"
+            >
+              <span class="hours">{{ row.hours }}</span>
+              <span class="title" [class.blank]="!row.hasDescription">{{ row.title }}</span>
+              <span class="worked" title="Toggl-aika">{{ row.worked }}</span>
+              <span class="mark" aria-hidden="true">
+                @if (flash() === row.key) {
+                  Kopioitu
+                } @else if (copied().has(row.key)) {
+                  ✓
+                } @else {
+                  ⧉
+                }
+              </span>
+            </button>
+          </li>
+        }
+      </ul>
+    } @else {
+      <p class="empty">Tänään ei ole kirjattavaa.</p>
+    }
+
+    <footer class="foot" data-tauri-drag-region>
+      <span data-tauri-drag-region
+        >Yhteensä <strong>{{ v.total }}</strong></span
+      >
+      <button type="button" class="copy-all" [disabled]="v.rows.length === 0" (click)="copyAll()">
+        {{ flash() === 'all' ? 'Kopioitu ✓' : 'Kopioi kaikki' }}
+      </button>
+    </footer>
+  } @else {
+    <p class="empty">Ladataan…</p>
+  }
+
+  @if (error(); as message) {
+    <p class="error" role="alert">⚠ {{ message }}</p>
+  }
+  <p class="visually-hidden" role="status">{{ announcement() }}</p>
+</section>

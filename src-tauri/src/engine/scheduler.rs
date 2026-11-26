@@ -478,6 +478,7 @@ impl SyncEngine {
                     id: Some(entry.id),
                     workspace_id: entry.workspace_id,
                     start: entry.start,
+                    description: entry.description,
                 });
                 day.has_entries = true;
                 self.publish();

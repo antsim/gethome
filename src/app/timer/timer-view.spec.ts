@@ -30,6 +30,7 @@ describe('toTimerView', () => {
     expect(view.label).toBe('Tauolla');
     expect(view.detail).toBe('tauko 0:12');
     expect(view.tone).toBe('break');
+    expect(view.canFinish).toBe(true);
   });
 
   it('shows overtime with a plus sign', () => {
@@ -42,6 +43,7 @@ describe('toTimerView', () => {
   it('disables control without a valid token', () => {
     const view = toTimerView(vm({ status: 'NotStarted', running: false, syncWarning: 'noToken' }));
     expect(view.canControl).toBe(false);
+    expect(view.canFinish).toBe(false);
     expect(view.warning).toContain('API -token');
   });
 });

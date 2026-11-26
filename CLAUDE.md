@@ -39,11 +39,12 @@ src-tauri/src/
   error.rs            AppError → { code, message } (Finnish message for the UI)
   clock.rs            Clock trait (SystemClock, ManualClock for tests)
   tray.rs             Tray title formatting + menu
-  windows.rs          Floating timer window and settings window
+  windows.rs          Floating timer window (+ summary size) and settings window
   engine/
     calendar.rs       Local-day bounds (DST-safe)
     state.rs          DayState built from time entries, SyncStatus
     compute.rs        PURE: (DayState, now, tz, targets) → TimerViewModel
+    summary.rs        PURE: day's tasks rounded to half hours (timesheet copy)
     scheduler.rs      SyncEngine: polling, backoff, wake/day change, stop/resume
   toggl/
     client.rs         The only place that talks HTTP to Toggl: auth, rate
@@ -60,6 +61,7 @@ src-tauri/src/
 src/app/
   core/               Models, typed invoke wrappers, state services (signals)
   timer/              Floating window view (+ pure timer-view.ts mapping)
+  summary/            Day summary shown in the expanded floating window
   settings/           Settings window (reactive forms)
 ```
 
