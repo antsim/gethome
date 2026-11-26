@@ -55,7 +55,9 @@
   <form [formGroup]="form" (ngSubmit)="save()">
     <section aria-labelledby="targets-heading">
       <h2 id="targets-heading">Päivän tavoite</h2>
-      <p class="hint">Muodossa h:mm, esim. 7:30. Arvo 0 tarkoittaa vapaapäivää.</p>
+      <p class="hint">
+        Puolen tunnin tarkkuudella muodossa h:mm, esim. 7:30. Arvo 0 tarkoittaa vapaapäivää.
+      </p>
       <div class="targets" formArrayName="dailyTargets">
         @for (day of weekdays; track day; let i = $index) {
           <label [for]="'target-' + i">{{ day }}</label>
@@ -95,6 +97,10 @@
       <label class="check">
         <input type="checkbox" formControlName="autostart" />
         Käynnistä kirjautuessa
+      </label>
+      <label class="check">
+        <input type="checkbox" formControlName="autoShowSummary" />
+        Näytä päivän kirjaukset automaattisesti, kun tavoite täyttyy
       </label>
       <label class="range" for="opacity">
         Ikkunan läpinäkyvyys

@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 /// Default daily target: 7 h 30 min.
 pub const DEFAULT_TARGET_MINUTES: u32 = 7 * 60 + 30;
 const MAX_TARGET_MINUTES: u32 = 24 * 60;
+/// Targets are whole or half hours, because time is booked in half hours.
+pub const TARGET_STEP_MINUTES: u32 = 30;
 const FALLBACK_TIME_ZONE: Tz = chrono_tz::Europe::Helsinki;
 pub const MIN_OPACITY: u8 = 60;
 pub const MAX_OPACITY: u8 = 100;
@@ -48,6 +50,8 @@ pub struct Settings {
     pub window_opacity: u8,
     /// Whether the floating window is shown. Persisted across restarts.
     pub timer_window_visible: bool,
+    /// Open the day summary automatically when the target is reached.
+    pub auto_show_summary: bool,
 }
 
 impl Default for Settings {
@@ -59,13 +63,14 @@ impl Default for Settings {
             autostart: false,
             window_opacity: MAX_OPACITY,
             timer_window_visible: true,
+            auto_show_summary: true,
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SettingsError {
-    #[error("daily target must be between 0 and 24 hours")]
+    #[error("daily target must be 0–24 hours in steps of {TARGET_STEP_MINUTES} minutes")]
     Target,
     #[error("unknown time zone: {0}")]
     TimeZone(String),
@@ -75,7 +80,12 @@ pub enum SettingsError {
 
 impl Settings {
     pub fn validate(&self) -> Result<(), SettingsError> {
-        if self.daily_targets.0.iter().any(|m| *m > MAX_TARGET_MINUTES) {
+        if self
+            .daily_targets
+            .0
+            .iter()
+            .any(|m| *m > MAX_TARGET_MINUTES || m % TARGET_STEP_MINUTES != 0)
+        {
             return Err(SettingsError::Target);
         }
         if let Some(name) = &self.timezone {
@@ -94,6 +104,11 @@ impl Settings {
         let defaults = Self::default();
         if self.daily_targets.0.iter().any(|m| *m > MAX_TARGET_MINUTES) {
             self.daily_targets = defaults.daily_targets;
+        }
+        // Older versions allowed any minute; round to the nearest half hour.
+        for minutes in &mut self.daily_targets.0 {
+            let step = TARGET_STEP_MINUTES;
+            *minutes = ((*minutes + step / 2) / step * step).min(MAX_TARGET_MINUTES);
         }
         if self
             .timezone
@@ -152,6 +167,13 @@ mod tests {
             ..Settings::default()
         };
         assert_eq!(bad_opacity.validate(), Err(SettingsError::Opacity));
+        let mut targets = WeeklyTargets::default();
+        targets.0[0] = 7 * 60 + 45;
+        let bad_target = Settings {
+            daily_targets: targets,
+            ..Settings::default()
+        };
+        assert_eq!(bad_target.validate(), Err(SettingsError::Target));
     }
 
     #[test]
@@ -163,13 +185,20 @@ mod tests {
 
     #[test]
     fn sanitizes_values_loaded_from_disk() {
+        let mut targets = WeeklyTargets::default();
+        targets.0[0] = 7 * 60 + 45;
+        targets.0[1] = 7 * 60 + 10;
         let loaded = Settings {
             timezone: Some("Nope".into()),
             window_opacity: 5,
+            daily_targets: targets,
             ..Settings::default()
         };
         let clean = loaded.sanitized();
         assert_eq!(clean.timezone, None);
         assert_eq!(clean.window_opacity, MIN_OPACITY);
+        assert_eq!(clean.daily_targets.0[0], 8 * 60);
+        assert_eq!(clean.daily_targets.0[1], 7 * 60);
+        assert!(clean.validate().is_ok());
     }
 }

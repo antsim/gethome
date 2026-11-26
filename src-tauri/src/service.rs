@@ -13,16 +13,20 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use chrono::NaiveDate;
 use chrono_tz::Tz;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt as _;
+use tauri_plugin_clipboard_manager::ClipboardExt as _;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::time::MissedTickBehavior;
 
 use crate::clock::{Clock, SystemClock};
+use crate::engine::calendar::local_date;
 use crate::engine::{
-    compute, ControlError, EngineSnapshot, PollConfig, RefreshOutcome, SyncEngine, TimerViewModel,
+    compute, day_summary, ControlError, DaySummary, EngineSnapshot, PollConfig, RefreshOutcome,
+    SyncEngine, TimerStatus, TimerViewModel,
 };
 use crate::error::AppError;
 use crate::settings::persistence::SettingsRepository;
@@ -35,6 +39,8 @@ use crate::{tray, windows};
 pub const TIMER_STATE_EVENT: &str = "timer-state";
 /// Event carrying the new [`Settings`] after they change.
 pub const SETTINGS_CHANGED_EVENT: &str = "settings-changed";
+/// Event carrying whether the day summary is open (`bool`).
+pub const SUMMARY_VISIBILITY_EVENT: &str = "summary-visibility";
 
 const TICK: Duration = Duration::from_secs(1);
 const COMMAND_QUEUE: usize = 16;
@@ -47,6 +53,17 @@ enum EngineCommand {
     Resume(Reply<Result<(), ControlError>>),
     TokenChanged(Option<i64>),
     TimeZoneChanged(Tz),
+}
+
+/// State of the day summary shown in the floating window.
+#[derive(Debug, Default)]
+struct SummaryState {
+    /// `Some` while the summary is open: how to restore the window.
+    expanded: Option<windows::CompactGeometry>,
+    /// Task count the window was last sized for.
+    fitted_rows: usize,
+    /// The day for which the summary was already opened automatically.
+    auto_shown_for: Option<NaiveDate>,
 }
 
 /// Settings plus account details, as shown in the settings window.
@@ -69,6 +86,7 @@ pub struct AppService {
     secrets: Box<dyn SecretStore>,
     /// Serializes settings writes (window toggles and the settings window).
     settings_write: Mutex<()>,
+    summary: Mutex<SummaryState>,
 }
 
 impl AppService {
@@ -115,6 +133,7 @@ impl AppService {
             repository,
             secrets,
             settings_write: Mutex::new(()),
+            summary: Mutex::new(SummaryState::default()),
         })
     }
 
@@ -124,6 +143,94 @@ impl AppService {
             &self.settings.borrow(),
             self.clock.as_ref(),
         )
+    }
+
+    pub fn day_summary(&self) -> DaySummary {
+        let settings = self.settings.borrow();
+        day_summary(
+            self.snapshot.borrow().day.as_ref(),
+            self.clock.now(),
+            settings.time_zone(),
+        )
+    }
+
+    pub fn is_summary_open(&self) -> bool {
+        self.lock_summary().expanded.is_some()
+    }
+
+    /// Expands the floating window to show the day summary.
+    ///
+    /// The summary lock is never held during window operations: on macOS
+    /// they wait for the main thread, which may itself wait for the lock.
+    pub fn show_summary(&self, app: &AppHandle) -> Result<(), AppError> {
+        let rows = self.day_summary().tasks.len();
+        if !windows::is_timer_window_visible(app) {
+            self.set_timer_window_visible(app, true)?;
+        }
+        let expanded = self.lock_summary().expanded;
+        if expanded.is_none() {
+            app.emit(SUMMARY_VISIBILITY_EVENT, true)?;
+        }
+        let geometry = windows::expand_timer_window(app, rows, expanded)?;
+        let mut summary = self.lock_summary();
+        summary.expanded = geometry;
+        summary.fitted_rows = rows;
+        Ok(())
+    }
+
+    /// Returns the floating window to the timer view.
+    pub fn close_summary(&self, app: &AppHandle) -> Result<(), AppError> {
+        let Some(geometry) = self.lock_summary().expanded.take() else {
+            return Ok(());
+        };
+        app.emit(SUMMARY_VISIBILITY_EVENT, false)?;
+        windows::restore_timer_window(app, geometry)?;
+        Ok(())
+    }
+
+    /// Stops the timer (if running) and opens the day summary.
+    pub async fn finish_day(&self, app: &AppHandle) -> Result<(), AppError> {
+        match self.stop_timer().await {
+            Ok(()) | Err(AppError::Control(ControlError::NotRunning)) => {}
+            Err(err) => return Err(err),
+        }
+        self.show_summary(app)
+    }
+
+    pub fn copy_to_clipboard(&self, app: &AppHandle, text: String) -> Result<(), AppError> {
+        app.clipboard()
+            .write_text(text)
+            .map_err(|err| AppError::Clipboard(err.to_string()))
+    }
+
+    /// Called by the UI loop: opens the summary once a day when the target
+    /// is reached, and keeps an open summary sized to its task count.
+    fn update_summary(&self, app: &AppHandle, vm: &TimerViewModel, settings: &Settings) {
+        let today = local_date(self.clock.now(), settings.time_zone());
+        let (open, auto_show) = {
+            let mut summary = self.lock_summary();
+            let reached = vm.status == TimerStatus::Done && vm.target_secs > 0;
+            let auto_show = reached && summary.auto_shown_for != Some(today);
+            if auto_show {
+                summary.auto_shown_for = Some(today);
+            }
+            (summary.expanded.is_some(), auto_show)
+        };
+        let result = if auto_show && settings.auto_show_summary && !open {
+            log::info!("daily target reached; opening the day summary");
+            self.show_summary(app)
+        } else if open && self.day_summary().tasks.len() != self.lock_summary().fitted_rows {
+            self.show_summary(app)
+        } else {
+            Ok(())
+        };
+        if let Err(err) = result {
+            log::warn!("could not update the day summary: {err}");
+        }
+    }
+
+    fn lock_summary(&self) -> std::sync::MutexGuard<'_, SummaryState> {
+        self.summary.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn settings(&self) -> Settings {
@@ -333,6 +440,9 @@ async fn run_ui(
         }
         if let Some(menu) = app.try_state::<tray::TrayMenu>() {
             menu.update(vm.running, windows::is_timer_window_visible(&app));
+        }
+        if let Some(service) = app.try_state::<AppService>() {
+            service.update_summary(&app, &vm, &settings);
         }
     }
 }

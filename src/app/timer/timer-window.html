@@ -1,17 +1,38 @@
-<main class="card" [attr.data-tone]="view()?.tone ?? 'idle'" data-tauri-drag-region>
-  @if (view(); as v) {
+<main
+  class="card"
+  [class.expanded]="summaryOpen()"
+  [attr.data-tone]="view()?.tone ?? 'idle'"
+  data-tauri-drag-region
+>
+  @if (summaryOpen()) {
+    <app-day-summary />
+  } @else if (view(); as v) {
     <div class="row" data-tauri-drag-region>
       <div class="time" data-tauri-drag-region aria-live="off">{{ v.time }}</div>
-      <button
-        type="button"
-        class="control"
-        [disabled]="pending() || !v.canControl"
-        [attr.aria-label]="v.running ? 'Pysäytä ajastin' : 'Jatka työtä'"
-        [title]="v.running ? 'Pysäytä ajastin' : 'Jatka työtä'"
-        (click)="toggleTimer()"
-      >
-        {{ v.running ? '⏸' : '▶' }}
-      </button>
+      <div class="controls">
+        <button
+          type="button"
+          class="control"
+          [disabled]="pending() || !v.canControl"
+          [attr.aria-label]="v.running ? 'Pysäytä ajastin' : 'Jatka työtä'"
+          [title]="v.running ? 'Pysäytä ajastin' : 'Jatka työtä'"
+          (click)="toggleTimer()"
+        >
+          {{ v.running ? '⏸' : '▶' }}
+        </button>
+        @if (v.canFinish) {
+          <button
+            type="button"
+            class="control finish"
+            [disabled]="pending()"
+            aria-label="Lopeta työpäivä"
+            title="Lopeta työpäivä ja näytä kirjaukset"
+            (click)="finishDay()"
+          >
+            ⏹
+          </button>
+        }
+      </div>
     </div>
 
     <p class="status" data-tauri-drag-region>
@@ -42,13 +63,19 @@
     <p class="status" data-tauri-drag-region>Ladataan…</p>
   }
 
-  <button
-    type="button"
-    class="settings"
-    aria-label="Asetukset"
-    title="Asetukset"
-    (click)="openSettings()"
-  >
-    ⚙
-  </button>
+  @if (!summaryOpen()) {
+    <div class="corner">
+      <button
+        type="button"
+        aria-label="Päivän kirjaukset"
+        title="Päivän kirjaukset"
+        (click)="showSummary()"
+      >
+        📋
+      </button>
+      <button type="button" aria-label="Asetukset" title="Asetukset" (click)="openSettings()">
+        ⚙
+      </button>
+    </div>
+  }
 </main>

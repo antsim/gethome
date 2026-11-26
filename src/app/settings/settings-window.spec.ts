@@ -1,8 +1,10 @@
 import { TestBed } from '@angular/core/testing';
+import { FormControl } from '@angular/forms';
 
 import type { AccountInfo } from '../core/models';
 import { TauriCommands } from '../core/tauri-commands';
-import { SettingsWindow, describeAccount } from './settings-window';
+
+import { SettingsWindow, describeAccount, targetValidator } from './settings-window';
 
 describe('SettingsWindow', () => {
   const account: AccountInfo = {
@@ -52,5 +54,20 @@ describe('describeAccount', () => {
         organizationId: null,
       }),
     ).toBe('Toggl Track · Matti · Oma');
+  });
+});
+
+describe('targetValidator', () => {
+  const check = (value: string) => targetValidator(new FormControl(value, { nonNullable: true }));
+
+  it('accepts whole and half hours', () => {
+    expect(check('7:30')).toBeNull();
+    expect(check('6')).toBeNull();
+    expect(check('0')).toBeNull();
+  });
+
+  it('rejects other minutes and invalid input', () => {
+    expect(check('7:45')).toEqual({ halfHour: true });
+    expect(check('abc')).toEqual({ duration: true });
   });
 });

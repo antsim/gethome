@@ -33,6 +33,27 @@ export interface Settings {
   /** Percent, 60–100. */
   windowOpacity: number;
   timerWindowVisible: boolean;
+  /** Open the day summary automatically when the target is reached. */
+  autoShowSummary: boolean;
+}
+
+/** `engine/summary.rs` → `SummaryTask`: entries with the same description. */
+export interface SummaryTask {
+  /** Trimmed Toggl description; empty when the entries have none. */
+  description: string;
+  workedSecs: number;
+  /** Rounded time to book, a positive multiple of 30. */
+  bookedMinutes: number;
+}
+
+/** `engine/summary.rs` → `DaySummary`. */
+export interface DaySummary {
+  /** Local date, `YYYY-MM-DD`. */
+  date: string;
+  workedSecs: number;
+  bookedMinutes: number;
+  tasks: SummaryTask[];
+  running: boolean;
 }
 
 /** Which Toggl product the API token belongs to (detected from the token). */
@@ -67,7 +88,11 @@ export interface AppError {
 export const TauriEvent = {
   TimerState: 'timer-state',
   SettingsChanged: 'settings-changed',
+  SummaryVisibility: 'summary-visibility',
 } as const;
+
+/** Daily targets are whole or half hours (`settings/mod.rs`). */
+export const TARGET_STEP_MINUTES = 30;
 
 export const MIN_OPACITY = 60;
 export const MAX_OPACITY = 100;

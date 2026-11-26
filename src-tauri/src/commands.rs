@@ -3,7 +3,7 @@
 
 use tauri::{AppHandle, State};
 
-use crate::engine::{RefreshOutcome, TimerViewModel};
+use crate::engine::{DaySummary, RefreshOutcome, TimerViewModel};
 use crate::error::AppError;
 use crate::service::{AppService, SettingsView};
 use crate::settings::Settings;
@@ -83,4 +83,38 @@ pub fn open_settings(app: AppHandle) -> CommandResult<()> {
 #[tauri::command]
 pub fn list_timezones() -> Vec<&'static str> {
     chrono_tz::TZ_VARIANTS.iter().map(|tz| tz.name()).collect()
+}
+
+#[tauri::command]
+pub fn get_day_summary(service: State<'_, AppService>) -> DaySummary {
+    service.day_summary()
+}
+
+#[tauri::command]
+pub fn is_summary_open(service: State<'_, AppService>) -> bool {
+    service.is_summary_open()
+}
+
+#[tauri::command]
+pub fn show_summary(app: AppHandle, service: State<'_, AppService>) -> CommandResult<()> {
+    service.show_summary(&app)
+}
+
+#[tauri::command]
+pub fn close_summary(app: AppHandle, service: State<'_, AppService>) -> CommandResult<()> {
+    service.close_summary(&app)
+}
+
+#[tauri::command]
+pub async fn finish_day(app: AppHandle, service: State<'_, AppService>) -> CommandResult<()> {
+    service.finish_day(&app).await
+}
+
+#[tauri::command]
+pub fn copy_to_clipboard(
+    app: AppHandle,
+    service: State<'_, AppService>,
+    text: String,
+) -> CommandResult<()> {
+    service.copy_to_clipboard(&app, text)
 }

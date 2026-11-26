@@ -25,6 +25,15 @@ pub struct RunningEntry {
     pub id: Option<i64>,
     pub workspace_id: i64,
     pub start: DateTime<Utc>,
+    pub description: Option<String>,
+}
+
+/// A finished time entry that overlaps the day. Used for the day summary.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DaySegment {
+    pub description: Option<String>,
+    pub start: DateTime<Utc>,
+    pub stop: DateTime<Utc>,
 }
 
 /// The fields copied from an earlier entry when work is resumed.
@@ -96,6 +105,8 @@ pub struct DayState {
     pub last_stop: Option<DateTime<Utc>>,
     /// The most recently started entry, used when resuming work.
     pub latest_entry: Option<EntryTemplate>,
+    /// Finished entries that overlap this day (unclipped).
+    pub segments: Vec<DaySegment>,
 }
 
 impl DayState {
@@ -107,6 +118,7 @@ impl DayState {
             running: None,
             last_stop: None,
             latest_entry: None,
+            segments: Vec::new(),
         }
     }
 
@@ -125,6 +137,7 @@ impl DayState {
                         id: Some(entry.id),
                         workspace_id: entry.workspace_id,
                         start: entry.start,
+                        description: entry.description.clone(),
                     });
                 }
                 if entry.start < day.end {
@@ -139,6 +152,11 @@ impl DayState {
                 state.completed_secs += secs;
                 state.has_entries = true;
                 state.last_stop = state.last_stop.max(Some(stop.min(day.end)));
+                state.segments.push(DaySegment {
+                    description: entry.description.clone(),
+                    start: entry.start,
+                    stop,
+                });
             }
         }
         state
@@ -151,6 +169,11 @@ impl DayState {
         self.completed_secs += day.overlap_secs(running.start, at);
         self.last_stop = Some(at);
         self.has_entries = true;
+        self.segments.push(DaySegment {
+            description: running.description.clone(),
+            start: running.start,
+            stop: at,
+        });
         Some(running)
     }
 
@@ -161,6 +184,9 @@ impl DayState {
         if self.last_stop == Some(from) {
             self.last_stop = Some(to);
         }
+        if let Some(segment) = self.segments.iter_mut().rev().find(|s| s.stop == from) {
+            segment.stop = to;
+        }
     }
 
     /// Optimistically marks a new entry as running from `at`.
@@ -169,6 +195,7 @@ impl DayState {
             id: None,
             workspace_id: template.workspace_id,
             start: at,
+            description: template.description.clone(),
         });
         self.latest_entry = Some(template);
         self.has_entries = true;
@@ -271,6 +298,7 @@ pub(crate) mod tests {
         let state = DayState::from_entries(&day, &entries);
         assert!(!state.has_entries);
         assert_eq!(state.completed_secs, 0);
+        assert!(state.segments.is_empty());
         // Yesterday's entry is still a valid template for resuming.
         assert!(state.latest_entry.is_some());
     }
@@ -283,6 +311,8 @@ pub(crate) mod tests {
         assert_eq!(stopped.id, Some(1));
         assert_eq!(state.completed_secs, 3600);
         assert_eq!(state.last_stop, Some(at(9, 0)));
+        assert_eq!(state.segments.len(), 1);
+        assert_eq!(state.segments[0].description.as_deref(), Some("entry 1"));
 
         state.start_running(at(9, 15), EntryTemplate::blank(1));
         assert_eq!(state.running.as_ref().map(|r| r.start), Some(at(9, 15)));
